@@ -11,13 +11,13 @@ temp = [i for i in t.values]
 
 x = numpy.array(temp[0][1:-1],dtype=numpy.float)
 
-for i in range(1,6):
+for i in range(1,2):
 
     p = numpy.array(temp[i][1:-1],dtype=numpy.float)
 
-    plt.plot(x,p,ls='-',lw=2,label=str(temp[i][-1]))
+    plt.plot(x,p,ls='-.',lw=1,label=str(temp[i][-1]))
 
 plt.legend()
-plt.xlabel(u"g")
-plt.ylabel(u"G")
+plt.xlabel(u"微波波长")
+plt.ylabel(u"光照强度")
 plt.show()

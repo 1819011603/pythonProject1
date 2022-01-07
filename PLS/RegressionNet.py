@@ -44,7 +44,7 @@ class Regression(nn.Module):
         super(Regression,self).__init__()
         self.l = nn.Sequential(
 
-            nn.Linear(84,32,dtype=torch.float64), # 35 12  91.97   32 11
+            nn.Linear(c,32,dtype=torch.float64), # 35 12  91.97   32 11
             nn.Sigmoid(),
 
             nn.Linear(32,11,dtype=torch.float64),

@@ -31,7 +31,8 @@ temp1 = []
 for s in u["E2":"E44"]:
     temp1.append(s[0].value)
 for i in range(9, 10):
-    plt.plot(str, temp[i])
-plt.xlabel(u"g")
-plt.ylabel(u"G")
+    plt.plot(str, temp[i],ls='-.',lw=1,label="72")
+plt.legend()
+plt.xlabel(u"微波波长")
+plt.ylabel(u"光照强度")
 plt.show()

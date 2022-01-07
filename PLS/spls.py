@@ -56,7 +56,7 @@ def wiener_filtering(tea):
 
 
 def mean_filtering(tea):
-    ans = np.convolve(tea, np.ones(3) / 3, mode="same")
+    ans = np.convolve(tea, np.ones(5) / 5,mode="same")
     return ans
 
 
@@ -121,9 +121,8 @@ def filter(x0):
     # x0 = D1(x0)
     # x0 = preprocessing.scale(x0) # 标准化
     for x in range(len(x0)):
+        x0[x] = gaussian_filtering(x0[x])
         x0[x] = savitzky_golay(x0[x])
-        # x0[x] = gaussian_filtering(x0[x])
-
         x0[x] = detrend(x0[x])
         x0[x] = med_filtering(x0[x])  # 提升0.2%
 
@@ -335,7 +334,7 @@ def regressionNet(x_train, x_test, y_train, y_test):
 
     with torch.no_grad():
         y_predict = net(x_test)
-        print(type(y_predict))
+        # print(type(y_predict))
         # print(list(y_predict.detach().numpy() - y_test.detach().numpy()))
         SSE = sum(sum(power((y_test.detach().numpy() - y_predict.detach().numpy()), 2), 0))
         SST = sum(sum(power((y_test.detach().numpy() - y_mean.detach().numpy()), 2), 0))
@@ -409,10 +408,10 @@ def LSTM1(x_train, x_test, y_train, y_test):
         # torch.save(net.state_dict(), "./{0}_{1}.pkl".format("_".join(s),round(RR*100,2)))
     return RR, RMSE
 
-def testRR(x0,y0):
+def testRR(x0,y0,file_path= "./PLS-master/data/Sigmoid_Sigmoid_99.36.pkl"):
     x0 = filter(x0)
     net = Regression()
-    pre = torch.load("./PLS-master/data/Sigmoid_Sigmoid_99.36.pkl")
+    pre = torch.load(file_path)
 
     net.load_state_dict(pre, strict=False)
     with torch.no_grad():
@@ -433,12 +432,54 @@ def testRR(x0,y0):
 
 
 x0, y0 = loadDataSet01('./PLS-master/data/test_all_reflect1.txt', ', ')  # 单因变量与多因变量
+# import openpyxl
+# import numpy
+# t = openpyxl.load_workbook("test_all_reflect.xlsx", True).active
+#
+# y = []
+# temp = [i for i in t.values]
+#
+#
+# x = numpy.array(temp[0][1:-1],dtype=numpy.float)
+# plt.figure(figsize=(12,9),dpi=130)
+# plt.plot(x,x0[0],label=str("原始曲线"),ls='-',color="red")
+# #
+# x1 = filter(x0)
+# plt.plot(x,x1[0],label=str("SG平滑+去趋势+中值滤波"),ls='-',color="green")
+
+# x1 = wiener_filtering(x0[0])
+# plt.plot(x,x1,label=str("wiener"),ls='-')
+#
+# x1 = mean_filtering(x0[0])
+# plt.plot(x,x1,label=str("滑动平均法"),ls='-')
+# x1 = MSC(x0)
+#
+# plt.plot(x,x1[0],label=str("多元反射矫正"),ls='-.')
+# x1 = savitzky_golay(x0)
+# plt.plot(x,x1[0],label=str("SG平滑"),ls='-',color= 'green')
+# x1 = D1(x0)
+# print(np.shape(x1))
+# plt.plot(x[:-1],x1[0],label=str("一阶导数差值"),ls='-.')
+# x1 = D2(x0)
+# plt.plot(x[:-2],x1[0],label=str("二阶导数差值"),ls='-.')
+#
+# x1 = gaussian_filtering(x0)
+# plt.plot(x,x1[0],label=str("高斯平滑"),ls='-.')
+#
+# x1 = detrend(x0)
+# plt.plot(x,x1[0],label=str("去趋势"),ls='-',color="black")
+# plt.legend()
+# plt.xlabel(u"反射率")
+# plt.ylabel(u"光谱波长")
+# plt.show()
+
+
 
 # testRR(x0,y0)
 
 # split10item(x0, y0, LSTM1, splits=10, random_state=45, extend=1)
-split10item(x0, y0, regressionNet, splits=8, random_state=11, extend=1)
-split10item(x0, y0, test, splits=8, random_state=11, extend=1)
+split10item(x0, y0, regressionNet, splits=10, random_state=5, extend=1)
+# split10item(x0, y0, test, splits=10, random_state=11, extend=1)
 # split10item(x0, y0, beyesi, splits=5, random_state=5, extend=1)
 # split10item(x0,y0,RandomForestRegressor,splits=10,random_state=5,extend=1)
 

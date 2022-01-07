@@ -60,20 +60,50 @@ def savitzky_golay(ans):  # 实现曲线平滑
 def detrend(ans):
     ans = signal.detrend(ans)  # 去除非线性趋势 去除散射
     return ans
+def MSC(data_x):  # 多元散射校正
+    ## 计算平均光谱做为标准光谱
+    mean = numpy.mean(data_x, axis=0)
 
+    n, p = data_x.shape
+    msc_x = numpy.ones((n, p))
+
+    for i in range(n):
+        y = data_x[i, :]
+        lin = LinearRegression()
+        lin.fit(mean.reshape(-1, 1), y.reshape(-1, 1))
+        k = lin.coef_  # 线性回归系数
+        b = lin.intercept_ # 线性回归截距
+        msc_x[i, :] = (y - b) / k
+    return msc_x
+
+def EMSC(data_x):  # 多元散射校正
+    ## 计算平均光谱做为标准光谱
+    mean = numpy.mean(data_x, axis=0)
+
+    n, p = data_x.shape
+    msc_x = numpy.ones((n, p))
+
+    for i in range(n):
+        y = data_x[i, :]
+        lin = LinearRegression()
+        lin.fit(mean.reshape(-1, 1), y.reshape(-1, 1))
+        k = lin.coef_  # 线性回归系数
+        b = lin.intercept_ # 线性回归截距
+        msc_x[i, :] = (y - b) / k
+    return msc_x
 # 信号预处理
 def filter(x0):
-    # x0 = MSC(x0)
+    # x0 = MSC(x0) #掉0.4%
     # x0 = D1(x0)
     # x0 = preprocessing.scale(x0) # 标准化
     for x in range(len(x0)):
         x0[x] = savitzky_golay(x0[x])
         # x0[x] = gaussian_filtering(x0[x])
         x0[x] = detrend(x0[x])
-        x0[x] = med_filtering(x0[x])  # 提升0.2%
+        # x0[x] = med_filtering(x0[x])  # 并没有提升
     return x0
 
-
+import torch
 # 获得RR RMSE
 def getRR_RMSE(y_test,y_predict):
     if isinstance(y_test, torch.Tensor):
@@ -81,7 +111,7 @@ def getRR_RMSE(y_test,y_predict):
         y_mean = torch.tensor(mean(y_test, 0), dtype=torch.float64)
         SSE = sum(sum(power((y_test.detach().numpy() - y_predict.detach().numpy()), 2), 0))
         SST = sum(sum(power((y_test.detach().numpy() - y_mean.detach().numpy()), 2), 0))
-        SSR = sum(sum(power((y_predict.detach().numpy() - y_mean.detach().numpy()), 2), 0))
+        # SSR = sum(sum(power((y_predict.detach().numpy() - y_mean.detach().numpy()), 2), 0))
         # SSR = SST-SSE
         RR = 1 - SSE / SST
         RMSE = sqrt(SSE / row)
@@ -103,12 +133,28 @@ def PLS(x_train, x_test, y_train, y_test):
     start = 11
     num = 1
     for i in range(start, start + num):
-        pls2 = PLSRegression(n_components=i, max_iter=1000, tol=1e-03, scale=True)
+        pls2 = PLSRegression(n_components=i, max_iter=750, tol=1e-06, scale=True)
         pls2.fit(x_train, y_train)
         y_predict = pls2.predict(x_test)
         RR,RMSE = getRR_RMSE(y_test,y_predict)
     return RR, RMSE
 
+def PLS(x_train, x_test, y_train, y_test,x_val,y_val):
+    RR = 0
+    RMSE = 0
+    RR1 = 0
+    RMSE1 = 0
+    start = 11
+    num = 1
+    for i in range(start, start + num):
+        pls2 = PLSRegression(n_components=i, max_iter=750, tol=1e-06, scale=True)
+        pls2.fit(x_train, y_train)
+        y_predict = pls2.predict(x_test)
+        y_val_ = pls2.predict(x_val)
+        RR,RMSE = getRR_RMSE(y_test,y_predict)
+        RR1,RMSE1 = getRR_RMSE(y_val,y_val_)
+
+    return RR, RMSE,RR1,RMSE1
 
 def split10items(x0, y0, splitss=10, random_state=1, extend=1):
     import random
@@ -157,64 +203,12 @@ def Cross_validation(x0, y0, f_test, splits=10, random_state=11, extend=1):
     print(u"R^2 {0}%".format(np.round(p / len(x_trains) * 100, 2)))
     print(u"RMSE.", m / len(x_trains))
 j = 0
-import torch
-from  RegressionNet import Regression
-import torch.optim as optim
-def regressionNet(x_train, x_test, y_train, y_test):
-    net = Regression()
-    global j
-    print(net)
-    y_mean = torch.tensor(mean(y_test, 0), dtype=torch.float64)
-    x_train = torch.tensor(x_train, dtype=torch.float64)
-    x_test = torch.tensor(x_test, dtype=torch.float64)
-    y_train = torch.tensor(y_train, dtype=torch.float64)
-    y_test = torch.tensor(y_test, dtype=torch.float64)
 
-    row = len(y_test)
-    optimizer = optim.Adam(net.parameters(), lr=0.01, betas=(0.937, 0.999))
-    loss_func = torch.nn.MSELoss()
-
-    for i in range(30000):
-        y_predict = net(x_train)
-        loss = loss_func(y_predict, y_train)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        # print(y_predict)
-
-    with torch.no_grad():
-        y_predict = net(x_test)
-        # print(list(y_predict.detach().numpy() - y_test.detach().numpy()))
-        SSE = sum(sum(power((y_test.detach().numpy() - y_predict.detach().numpy()), 2), 0))
-        SST = sum(sum(power((y_test.detach().numpy() - y_mean.detach().numpy()), 2), 0))
-        SSR = sum(sum(power((y_predict.detach().numpy() - y_mean.detach().numpy()), 2), 0))
-        # SSR = SST-SSE
-        RR = 1 - SSE / SST
-        """
-        RMSE实际上描述的是一种离散程度，不是绝对误差，其实就像是你射击，你开10枪，我也开10枪，你和我的总环数都是90环，你的子弹都落在离靶心差不多距离的地方,
-        而我有几枪非常准，可是另外几枪又偏的有些离谱，这样的话我的RMSE就比你大，反映出你射击的稳定性高于我，但在仅以环数论胜负的射击比赛中，我们俩仍然是平手。
-        这样说你应该能理解吧，基本可以理解为稳定性。那么对于你预报来说，在一个场中RMSE小说明你的模式对于所有区域的预报水平都相当，反之，RMSE较大，
-        那么你的模式在不同区域的预报水平存在着较大的差异。
-
-        """
-
-        RMSE = sqrt(SSE / row)
-        j += 1
-        s = ["L"]
-        for i, item in enumerate(net.l.named_children()):
-
-            if i % 2 == 1:
-                s.append(str(item[1]).split('(')[0])
-            else:
-                s.append(str(item[1]).split("in_features=")[1].split(",")[0])
-        print(round(RR * 100, 2), RMSE)
-        torch.save(net.state_dict(), "./{0}_{1}.pkl".format("_".join(s),round(RR*100,2)))
-    return RR, RMSE
-def get_log_name(dir_path="./"):
+def get_log_name(pre="recode",suff= "log",dir_path="./"):
     import pathlib
     import re
     kk = re.compile("(\d+)")
-    o = [str(i.stem) for i in pathlib.Path(dir_path).glob("recode*.log")]
+    o = [str(i.stem) for i in pathlib.Path(dir_path).glob("{}*.{}".format(pre,suff))]
 
     max1 = 0
     for po in o:
@@ -222,7 +216,7 @@ def get_log_name(dir_path="./"):
         if u != None:
             m = int(u.group(0))
             max1 = max(m, max1)
-    return "recode{}.log".format(max1 + 1)
+    return "{}/{}{}.{}".format(pathlib.Path(dir_path),pre,max1 + 1,suff)
 def getSplitsAndIndices(split_len=10):
     l = np.shape(x0)[1]
     len1 = int(np.floor(l / split_len))  # 剩余的尾巴不要了
@@ -314,3 +308,12 @@ def get_iter(x0):
         for m in x0:
             xx.append(m[ans])
         yield np.array(xx)  # x0
+
+
+def getDataIndex(x0, index):
+    l1 = np.shape(x0)[0]
+    mm = []
+    for i in range(l1):
+        mm.append(np.array(x0[i][index]))
+    return np.array(mm)
+
