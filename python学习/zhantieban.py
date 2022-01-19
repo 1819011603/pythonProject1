@@ -1,4 +1,5 @@
 # 剪贴板
+import random
 
 import pyperclip
 import time
@@ -13,11 +14,12 @@ start = time.time()
 
 import re
 
-p1 = re.compile(r"([a-zA-Z]+[0-9_]*[a-zA-Z]*\.)+[a-zA-Z]+[0-9_]*[a-zA-Z]*\((\S+\s*)*\)")  # 代码中 含 对象.方法名(形参)
+p1 = re.compile(r"([a-zA-Z]+[0-9_]*[a-zA-Z]*\.)+[a-zA-Z]+[0-9_]*[a-zA-Z]*\((([^()\s]+\s+)*[^()\s]+)?\)")   # 代码中 含 对象.方法名(形参, 形参)
+
 p2 = re.compile(r"import [a-zA-Z]+(\.[a-zA-Z]+)*")  # 含 import 的代码
 # p3 = re.compile(r"[a-zA-Z0-9] [=|&]{2} [a-zA-Z0-9]")  # 含 == && || 的代码
 # p4 = re.compile("[a-z-]\n") # 检查是否有字母/- + 换行 有才需要去换行
-p5 = re.compile(r"[\u4e00-\u9fa5]{1,5}")  # 有中文不需要去换行
+p5 = re.compile(r"[\u4e00-\u9fa5]{5}")  # 有中文不需要去换行
 # 附加的 csdn
 p6 = re.compile(r"[-—]{5}")
 # leetcode
@@ -32,11 +34,90 @@ p9 = re.compile("[’”，；]")
 p10 = re.compile("<[a-zA-Z]*?>.*?</[a-zA-Z]*?>")
 
 p11 = re.compile(r"((\s?([(<\"\'‘”])*[0-9a-zA-Z'’—\\◦%/-]+[,，：:.。;；]*[)>\"\'‘“]*\s?)+\s?)", re.M)
+
+# 文件/文件夹
+p12 = re.compile(r"^(file://)*(/[-.\w\u2E80-\u9FFF])+[\w.-]+")
 # p11 = re.compile(@aab bbb, re.M)
 
 # googletrans依赖的httpx 不支持 socks5代理
 # 解决方案是把ALL_PROXY换为http代理:
 
+def translate(text):
+    import urllib.parse, urllib.request
+    import hashlib
+    import urllib
+    import requests
+    import sys
+    import uuid
+    import json
+
+
+    def translateBaidu(text, f='auto', t='zh'):
+        appid = '20220110001051995'
+        secretKey = 'BFJctEPzjOUzQ0i21omV'
+        url_baidu = 'http://api.fanyi.baidu.com/api/trans/vip/translate'
+        salt = random.randint(32768, 65536)
+        sign = appid + text + str(salt) + secretKey
+        sign = hashlib.md5(sign.encode()).hexdigest()
+        url = url_baidu + '?appid=' + appid + '&q=' + urllib.parse.quote(text) + '&from=' + f + '&to=' + t + '&salt=' + str(salt) + '&sign=' + sign
+        response = urllib.request.urlopen(url)
+        content = response.read().decode('utf-8')
+        data = json.loads(content)
+        result = str(data['trans_result'][0]['dst'])
+        print("百度翻译：" + result + "\n\n")
+
+
+    def youdao(text):
+        url_youdao = 'https://openapi.youdao.com/api'
+        APP_KEY = '1283c24b43987a6d'
+        APP_SECRET = 'OuZwVaEIlJ53WZw7Tj6LPFkoURIDPDWH'
+
+        def encrypt(signStr):
+            hash_algorithm = hashlib.sha256()
+            hash_algorithm.update(signStr.encode('utf-8'))
+            return hash_algorithm.hexdigest()
+
+        def truncate(q):
+            if q is None:
+                return None
+            size = len(q)
+            return q if size <= 20 else q[0:10] + str(size) + q[size - 10:size]
+        salt = str(uuid.uuid1())
+        curtime = str(int(time.time()))
+        dicts = {'from':"AUTO",
+                 'to':'zh',
+                 'q':text,
+                 'signType':'v3',
+                 'curtime':  curtime,
+                 'salt':salt,
+                 'appKey':APP_KEY,
+                 'sign':encrypt(APP_KEY + truncate(text) + salt + curtime + APP_SECRET)
+                 }
+        headers = {'Content-Type':"application/x-www-form-urlencoded",'user-agent':'Mozilla/5.0 (X11; Linux x86_64) '
+                                                                          'AppleWebKit/537.36 (KHTML, like Gecko) '
+                                                                          'Chrome/100.0.4692.36 Safari/537.36'}
+        response = requests.post(url_youdao, data=dicts, headers=headers)
+        import json
+        json = json.loads(response.content.decode('utf-8'))
+        print("有道翻译：" +json['translation'][0]+ '\n\n')
+
+    try:
+        translateBaidu( text)
+
+    except Exception as e:
+        print(f"error:{e.args}" + '\n\n')
+    try:
+
+        youdao(text)
+    except Exception as e:
+        print(f"error:{e.args}" + '\n\n')
+
+    from deepL import sougou
+    try:
+
+        sougou(text)
+    except Exception as e:
+        print(f"error:{e.args}" + '\n\n')
 
 while time.time() - start < 12 * 24 * 60 * 60:
     is_English = False
@@ -58,18 +139,25 @@ while time.time() - start < 12 * 24 * 60 * 60:
         u = u[:t]
         pyperclip.copy(u)
     text = u
-    print(re.search(p1,u))
-    if re.search(p1, u) is None and re.search(p5, u) is None:
+
+    if re.search(p12, u) is not None:
+        print(f"这是一个文件/文件夹： {u}")
+    elif re.search(p1, u) is None and re.search(p5, u) is None and re.search(p2, u) is None:
+        p1_ans = re.search(p1, u)
+        if p1_ans is None:
+            print("不含有函数调用a.b(c, d)")
+        else:
+            print(f"含有函数调用a.b(c, d): {p1_ans.group(0)}")
         dicts = re.findall(p11, u)
         i = 0
         le = len(u)
         for d in dicts:
             i += len(d[0])
-            if len(d[0]) > le / 10 * 9:
+            if len(d[0]) > le * 0.80:
                 is_English = True
 
         print(f"匹配的字符数:{i},总字符数：{le}")
-        if not is_English and i > le * 0.96:
+        if not is_English and i > le * 0.90:
             is_English = True
         print(f"是否为英文文章： {'是' if is_English else '不是'}")
 
@@ -118,12 +206,16 @@ while time.time() - start < 12 * 24 * 60 * 60:
 
         translator = Translator()
         print(u + '\n\n\n')
-        trans_s = str(translator.translate(text, dest="zh-CN").text)
-        print(trans_s + '\n\n')
-    else:
-        print("不是英文文章！"+'\n')
+        trans_s = str(translator.translate(str(u), dest="zh-CN").text)
+        print("谷歌翻译：" + trans_s + '\n\n')
 
-    text = u
+        translate(u)
+    else:
+        print(f"不是英文文章！总字符数：{len(u)}"+'\n')
+
+
 
     time.sleep(0.3)
 print("已运行12 * 24小时后关闭")
+
+
