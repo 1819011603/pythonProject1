@@ -30,7 +30,8 @@ class tea_processd:
         
         """
 
-        plt.plot(self.xpoints, ypoints, ls='solid', lw=2,)
+        plt.plot(self.xpoints, ypoints, ls='solid', lw=2,label=str(humidity))
+
         plt.legend()
         plt.xlabel(u"光照频率")
         plt.ylabel(u"光照强度")

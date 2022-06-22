@@ -1,3 +1,5 @@
+import pathlib
+
 import numpy
 import numpy as np
 from sklearn.cross_decomposition import PLSRegression
@@ -6,6 +8,7 @@ import scipy
 from scipy import signal
 import pandas as pd
 # 数据读取-单因变量与多因变量
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 
 
@@ -94,27 +97,37 @@ def EMSC(data_x):  # 多元散射校正
 # 信号预处理
 def filter(x0):
     # x0 = MSC(x0) #掉0.4%
-    # x0 = D1(x0)
-    # x0 = preprocessing.scale(x0) # 标准化
+    xx = np.zeros(shape=(x0.shape[0],x0.shape[1]-2))
+    # print(xx.shape)
+
     for x in range(len(x0)):
         x0[x] = savitzky_golay(x0[x])
         # x0[x] = gaussian_filtering(x0[x])
         x0[x] = detrend(x0[x])
-        # x0[x] = med_filtering(x0[x])  # 并没有提升
-    return x0
+
+        x0[x] = med_filtering(x0[x])  # 并没有提升
+        xx[x] = x0[x][1:-1]
+    # x0 = preprocessing.scale(x0) # 标准化
+
+    return xx
+    # return x0
 
 import torch
 # 获得RR RMSE
-def getRR_RMSE(y_test,y_predict):
+RPD_total = 0
+def getRR_RMSE(y_test,y_predict,isVal_ = False):
+    global RPD_total
     if isinstance(y_test, torch.Tensor):
         row = len(y_test)
-        y_mean = torch.tensor(mean(y_test, 0), dtype=torch.float64)
+        y_mean = torch.mean(y_test, 0).clone().detach()
         SSE = sum(sum(power((y_test.detach().numpy() - y_predict.detach().numpy()), 2), 0))
         SST = sum(sum(power((y_test.detach().numpy() - y_mean.detach().numpy()), 2), 0))
         # SSR = sum(sum(power((y_predict.detach().numpy() - y_mean.detach().numpy()), 2), 0))
         # SSR = SST-SSE
         RR = 1 - SSE / SST
         RMSE = sqrt(SSE / row)
+        if isVal_:
+            RPD_total += 1 / sqrt(1 - RR)
         return RR, RMSE
     y_mean = mean(y_test, 0)
     row = len(y_test)
@@ -124,8 +137,114 @@ def getRR_RMSE(y_test,y_predict):
     # print(SSE, SST, SSR)
     RR = 1 - (SSE / SST)
     RMSE = sqrt(SSE / row)
+    if isVal_:
+        RPD_total += 1/sqrt(1-RR)
+    # print("RPD:",1/sqrt(1-RR))
     return RR,RMSE
 
+
+
+def PCA(x_train, x_test, y_train, y_test,x_val,y_val,n_components=100):
+    from sklearn.decomposition import PCA
+    # pls2 = PCA(copy=True,n_components=11, tol=1e-06)
+    pls2 = PCA(copy=True,n_components=n_components)
+    pls2.fit(x_train)
+
+    x_train = pls2.transform(x_train)
+    x_test = pls2.transform(x_test)
+    x_val = pls2.transform(x_val)
+    from biPls import regressionNet,LS_SVM
+    return x_train,x_test,y_train,y_test,x_val,y_val #[41,109]  99 100 159
+    # return PLS(x_train,x_test,y_train,y_test,x_val,y_val)  # 102
+    # return Linear_Regression(x_train,x_test,y_train,y_test,x_val,y_val) # 102
+
+
+
+    # y_predict = pls2.transform(x_test)
+    # print(y_predict.shape)
+    # print(pls2.components_)
+    # print("PCA:" , pls2.explained_variance_ratio_,len(pls2.explained_variance_ratio_))
+    # print(pls2.explained_variance_)
+
+    # y_val_ = pls2.predict(x_val)
+    # RR,RMSE = getRR_RMSE(y_test,y_predict)
+    # RR1,RMSE1 = getRR_RMSE(y_val,y_val_)
+
+    # return RR, RMSE,RR1,RMSE1
+
+
+def write_to_csv(y_predict,y_test,file_path="./PLS-master/data/Sigmoid_Sigmoid_99.36.pkl"):
+    y_predict = torch.reshape(torch.Tensor(y_predict),(-1,1))
+    y_test = torch.Tensor(y_test)
+    y_predict = torch.concat((y_predict, y_test, y_predict - y_test), dim=1)
+    y_predict = pd.DataFrame(y_predict.detach().numpy())
+    ff = get_log_name(pre="net", suff="csv", dir_path=str(pathlib.Path(file_path).parent))
+    print("csv file save in {}".format(ff))
+    y_predict.to_csv(ff)
+
+def LS_SVM(x_train, x_test, y_train, y_test,x_val,y_val):
+    from sklearn import svm
+    # pls2 = svm.LinearSVR(C=700,tol=1e-6)
+    # pls2 = svm.SVR(kernel='rbf',C=1e2,gamma=48)
+    # pls2 = svm.SVR(kernel='rbf',C=1000,gamma=48)
+    pls2 = svm.SVR(kernel='rbf',C=1000,gamma=48)
+    # pls2 = svm.SVR(kernel='rbf',C=10000,gamma=48)
+    # pls2 = svm.SVR(kernel='rbf',C=1e5,gamma=2.4)
+    # pls2 = svm.SVR(kernel='poly',C=20000000000,degree=2)
+    pls2.fit(x_train, y_train.ravel())
+    y_predict = pls2.predict(x_test)
+    # print("y_predict:" ,y_predict)
+    # print("y_test:" , y_test.ravel())
+    y_val_ = pls2.predict(x_val)
+    RR, RMSE = getRR_RMSE(y_test.ravel(), y_predict)
+    RR1, RMSE1 = getRR_RMSE(y_val.ravel(), y_val_,True)
+
+    # write_to_csv(y_val_,y_val)
+    # write_to_csv(y_predict,y_test)
+    return RR, RMSE, RR1, RMSE1
+
+
+#  https://blog.csdn.net/qq_41815357/article/details/109637463
+def randomForest(x_train, x_test, y_train, y_test, x_val, y_val):
+    forest = RandomForestRegressor(
+        n_estimators=5,
+        min_samples_leaf=10,
+        # oob_score=True,
+        max_features=20,
+        n_jobs=-1)
+    forest.fit(x_train, y_train.ravel())
+    y_predict = forest.predict(x_test)
+    # print("y_predict:" ,y_predict)
+    # print("y_test:" , y_test.ravel())
+    y_val_ = forest.predict(x_val)
+    RR, RMSE = getRR_RMSE(y_test.ravel(), y_predict)
+    RR1, RMSE1 = getRR_RMSE(y_val.ravel(), y_val_, True)
+
+    # write_to_csv(y_val_,y_val)
+    # write_to_csv(y_predict,y_test)
+    return RR, RMSE, RR1, RMSE1
+
+def PCA_randomForest(x_train, x_test, y_train, y_test, x_val, y_val,n_components=31):
+    x_train, x_test, y_train, y_test, x_val, y_val = PCA(x_train, x_test, y_train, y_test, x_val, y_val,n_components=n_components)
+    return randomForest(x_train, x_test, y_train, y_test, x_val, y_val)
+
+def PCA_LS_SVM(x_train, x_test, y_train, y_test,x_val,y_val,n_components=31):
+    x_train, x_test, y_train, y_test, x_val, y_val = PCA(x_train, x_test, y_train, y_test, x_val, y_val,n_components=n_components)
+    return LS_SVM(x_train, x_test, y_train, y_test, x_val, y_val)
+def Linear_Regression(x_train, x_test, y_train, y_test,x_val,y_val):
+
+
+    pls2 = LinearRegression()
+
+    pls2.fit(x_train, y_train)
+    # print(pls2.coef_)
+    # print(pls2.intercept_)
+    # print(pls2.score(x_train,y_train))
+    y_predict = pls2.predict(x_test)
+    y_val_ = pls2.predict(x_val)
+    RR, RMSE = getRR_RMSE(y_test, y_predict)
+    RR1, RMSE1 = getRR_RMSE(y_val, y_val_,True)
+    return RR, RMSE, RR1, RMSE1
 
 def PLS(x_train, x_test, y_train, y_test):
     RR = 0
@@ -151,10 +270,12 @@ def PLS(x_train, x_test, y_train, y_test,x_val,y_val):
         pls2.fit(x_train, y_train)
         y_predict = pls2.predict(x_test)
         y_val_ = pls2.predict(x_val)
-        RR,RMSE = getRR_RMSE(y_test,y_predict)
-        RR1,RMSE1 = getRR_RMSE(y_val,y_val_)
+        RR, RMSE = getRR_RMSE(y_test, y_predict)
+        RR1, RMSE1 = getRR_RMSE(y_val, y_val_,True)
+    return RR, RMSE, RR1, RMSE1
 
-    return RR, RMSE,RR1,RMSE1
+
+
 
 def split10items(x0, y0, splitss=10, random_state=1, extend=1):
     import random
@@ -209,14 +330,16 @@ def get_log_name(pre="recode",suff= "log",dir_path="./"):
     import re
     kk = re.compile("(\d+)")
     o = [str(i.stem) for i in pathlib.Path(dir_path).glob("{}*.{}".format(pre,suff))]
-
+    import datetime
+    day = str(datetime.date.today())
+    day = day[day.index('-')+1:].replace("-","_")
     max1 = 0
     for po in o:
         u = re.search(kk, po)
         if u != None:
             m = int(u.group(0))
             max1 = max(m, max1)
-    return "{}/{}{}.{}".format(pathlib.Path(dir_path),pre,max1 + 1,suff)
+    return "{}/{}{}_{}.{}".format(pathlib.Path(dir_path),pre,max1 + 1,day,suff)
 def getSplitsAndIndices(split_len=10):
     l = np.shape(x0)[1]
     len1 = int(np.floor(l / split_len))  # 剩余的尾巴不要了
@@ -317,3 +440,5 @@ def getDataIndex(x0, index):
         mm.append(np.array(x0[i][index]))
     return np.array(mm)
 
+if __name__=='__main__':
+    main1()

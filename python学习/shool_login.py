@@ -19,7 +19,9 @@ def daka(next_time):
     PATH = os.environ['PATH']
     PATH = "/opt/google/chrome-beta/:" + PATH
     os.environ["PATH"] = PATH
-    browser = webdriver.Chrome()
+    os.system("unset http_proxy")
+    os.system("unset http_proxys")
+    browser = webdriver.Chrome("/home/lenong0427/PycharmProjects/pythonProject1/python学习/chromedriver")
     text_notice_text = "获取失败"
     try:
         browser.get(url)
@@ -31,16 +33,18 @@ def daka(next_time):
         password.send_keys("lovely095268")
         # time.sleep(0.5)
         login_submit= browser.find_element_by_id("login_submit")
-        login_submit.click()
+        login_submit.click() # 登陆
         time.sleep(0.5)
-        # location = browser.find_element_by_xpath("//input[@readonly]")
+        location = browser.find_element_by_xpath("//div[@name='area']")
+        location.click()
+        time.sleep(200)
         locations = ['湖南省 长沙市 岳麓区',"湖南省 长沙市 天心区", "湖南省 长沙市 宁乡市"]
         l = locations[int(random.randint(0,99)/20) % 3]
         js = 'document.getElementsByName("area")[0].getElementsByTagName("input")[0].removeAttribute(' \
-             f'"readonly");document.getElementsByName("area")[0].getElementsByTagName("input")[0].value="{l}  "; '
+             f'"readonly");document.getElementsByName("area")[0].getElementsByTagName("input")[0].value="{l}"; '
         browser.execute_script(js)
         time.sleep(0.5)
-        submit = browser.find_element_by_xpath("//a[@class='wapcf-btn-qx']")
+        submit = browser.find_element_by_xpath("//div[@class='footers']")
         submit.click()
 
         text_notice = browser.find_element_by_xpath('//*[@id="wapat"]//div[@class="wapat-title"]')
@@ -51,7 +55,7 @@ def daka(next_time):
 
 
     finally:
-        browser.close()
+        # browser.close()
         import datetime
         now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         w = text_notice_text + f"\n今天打卡时间为:{now} \n明天打卡时间为:{next_time} \nIMAP授权密码: OAWEELFKTXKRBCOW"

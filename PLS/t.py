@@ -1,7 +1,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-with open("./recode20.log","r") as f:
+with open("./recode24.log","r") as f:
     lines = f.readlines()
 t = []
 for line in lines:
@@ -11,7 +11,9 @@ for line in lines:
 p = np.arange(255,10,-1)
 print(len(t))
 print(len(p))
-print(p)
+print('[',end='')
+print(*p,sep=', ',end='')
+print(']')
 plt.figure(figsize=(12,9),dpi=100)
 
 plt.plot(p,t,)
